@@ -16,8 +16,9 @@ enum VarValue {
 }
 
 typedef Arguments = {
-	cwd: String,
-	hxml: String,
+	?cwd: String,
+	?hxml: String,
+	?exec: String,
 	?program: String,
 	?args: Array<String>,
 	?argsFile: String,
@@ -107,6 +108,8 @@ class HLAdapter extends adapter.DebugSession {
 		workspaceDirectory = args.cwd;
 		Sys.setCwd(workspaceDirectory);
 		var program = readHXML(args.hxml);
+		if( args.program != null )
+			program = args.program;
 		try {
 			if( !startDebug(program,args.port) )
 				throw "Failed to start debugging";
@@ -157,6 +160,8 @@ class HLAdapter extends adapter.DebugSession {
 	}
 
 	function readHXML( hxml : String ) {
+		if( hxml == null ) return null;
+		
 		classPath = [];
 
 		var hxContent = try sys.io.File.getContent(hxml) catch( e : Dynamic ) throw "Missing HXML file '"+hxml+"'";
@@ -256,7 +261,11 @@ class HLAdapter extends adapter.DebugSession {
 				hlArgs.push(w);
 			}
 		}
-		proc = ChildProcess.spawn("hl", hlArgs, {env: {}, cwd: args.cwd});
+		var hl = "hl";
+		if( args.exec != null )
+			hl = args.exec;
+		var workspaceDirectory = if( args.cwd == null ) Path.directory(args.program) else args.cwd;
+		proc = ChildProcess.spawn(hl, hlArgs, {env: {}, cwd: workspaceDirectory});
 		proc.stdout.setEncoding('utf8');
 		var prev = "";
 		proc.stdout.on('data', function(buf) {
@@ -445,9 +454,13 @@ class HLAdapter extends adapter.DebugSession {
 		file = file.split("\\").join("/");
 		var filePath = file.toLowerCase();
 		var matches = [];
-		for( c in classPath )
-			if( StringTools.startsWith(filePath, c.toLowerCase()) )
-				matches.push(file.substr(c.length));
+		if( classPath != null ) {
+			for( c in classPath )
+				if( StringTools.startsWith(filePath, c.toLowerCase()) )
+					matches.push(file.substr(c.length));
+		} else {
+			matches.push(convertClientPathToDebugger(file));
+		}
 		return matches;
 	}
 
